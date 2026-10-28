@@ -1,1 +1,107 @@
 
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Taksi</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  html, body, #map { height: 100%; margin: 0; padding: 0; }
+  #bar {
+    position: fixed; left: 12px; right: 12px; bottom: 16px; z-index: 1000;
+    background: var(--tg-theme-bg-color, #fff); color: var(--tg-theme-text-color, #000);
+    border-radius: 14px; padding: 12px; box-shadow: 0 2px 12px rgba(0,0,0,.2);
+    font-family: system-ui, sans-serif; font-size: 15px;
+  }
+  #hint { margin-bottom: 8px; }
+  #confirm {
+    width: 100%; padding: 12px; border: 0; border-radius: 10px;
+    background: var(--tg-theme-button-color, #2481cc);
+    color: var(--tg-theme-button-text-color, #fff); font-size: 16px;
+  }
+  #confirm:disabled { opacity: .5; }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div id="bar">
+  <div id="hint">Yuklanmoqda... lokatsiyangiz aniqlanmoqda</div>
+  <button id="confirm" disabled>Buyurtma berish</button>
+</div>
+
+<script>
+const tg = window.Telegram.WebApp;
+tg.ready();
+tg.expand();
+
+// Samarkand markazi: lokatsiya aniqlanmasa shu joy ko'rsatiladi
+const DEFAULT_CENTER = [39.6542, 66.9597];
+
+const map = L.map("map", { zoomControl: false }).setView(DEFAULT_CENTER, 14);
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  attribution: "© OpenStreetMap",
+}).addTo(map);
+
+const pickupIcon = L.divIcon({ html: "🧍", className: "", iconSize: [30, 30] });
+const destIcon = L.divIcon({ html: "📍", className: "", iconSize: [30, 30] });
+
+let pickupMarker = null;
+let destMarker = null;
+let pickup = null;
+let dest = null;
+
+const hint = document.getElementById("hint");
+const confirmBtn = document.getElementById("confirm");
+
+function setPickup(lat, lon) {
+  pickup = { lat, lon };
+  if (pickupMarker) pickupMarker.setLatLng([lat, lon]);
+  else pickupMarker = L.marker([lat, lon], { icon: pickupIcon }).addTo(map);
+  map.setView([lat, lon], 16);
+  updateHint();
+}
+
+function updateHint() {
+  if (!pickup) {
+    hint.textContent = "Lokatsiyangiz aniqlanmadi. Xaritada o'z joyingizni belgilang.";
+  } else if (!dest) {
+    hint.textContent = "Qayerga borasiz? Xaritada bosib belgilang.";
+  } else {
+    hint.textContent = "Manzil belgilandi. Buyurtmani tasdiqlang.";
+  }
+  confirmBtn.disabled = !(pickup && dest);
+}
+
+// Xaritada bosilganda borish joyi belgilanadi
+map.on("click", (e) => {
+  dest = { lat: e.latlng.lat, lon: e.latlng.lng };
+  if (destMarker) destMarker.setLatLng(e.latlng);
+  else destMarker = L.marker(e.latlng, { icon: destIcon }).addTo(map);
+  updateHint();
+});
+
+// Ochilishi bilan yo'lovchi lokatsiyasi avtomatik olinadi
+if ("geolocation" in navigator) {
+  navigator.geolocation.getCurrentPosition(
+    (pos) => setPickup(pos.coords.latitude, pos.coords.longitude),
+    () => {
+      setPickup(DEFAULT_CENTER[0], DEFAULT_CENTER[1]);
+      hint.textContent = "Lokatsiyaga ruxsat berilmagan. Xaritada o'z joyingizni belgilang.";
+    },
+    { enableHighAccuracy: true, timeout: 10000 }
+  );
+} else {
+  setPickup(DEFAULT_CENTER[0], DEFAULT_CENTER[1]);
+}
+
+confirmBtn.addEventListener("click", () => {
+  if (!pickup || !dest) return;
+  // Ma'lumot botga yuboriladi va web app yopiladi
+  tg.sendData(JSON.stringify({ pickup, dest }));
+});
+</script>
+</body>
+</html>
