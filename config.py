@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 BOT_TOKEN = os.getenv("AAFtnHl5Wmtla7sw4h0m15GAAT1SnfTrJdM", "")
-WEBAPP_URL = os.getenv("", "")
+WEBAPP_URL = os.getenv(""https://r77449632-oss.github.io/luna-bot-new/webapp/index.html "")
 DB_PATH = os.getenv("DB_PATH", "taxi.db")
 ADMIN_IDS = {int(x) for x in os.getenv("7550237933", "").split(",") if x.strip().isdigit()}
 
