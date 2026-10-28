@@ -82,8 +82,11 @@ async def order_from_map(message: Message):
         await message.answer("Borish joyi juda yaqin. Xaritada boshqa nuqtani belgilang.")
         return
 
-    price, minutes = calc_price(km, db.get_settings())
-    order_id = db.create_order(message.from_user.id, pl, po, dl, do, km, minutes, price)
+    settings = db.get_settings()
+    price, minutes = calc_price(km, settings)
+    commission = round(price * settings["commission_percent"] / 100)
+    order_id = db.create_order(message.from_user.id, pl, po, dl, do, km, minutes, price,
+                               commission, price - commission)
     await message.answer(
         f"Buyurtma #{order_id}\n"
         f"Masofa: {km:.1f} km, taxminan {minutes} daqiqa\n"
@@ -109,7 +112,7 @@ async def confirm_order(cb: CallbackQuery, bot: Bot):
 
     text = (f"🚕 Yangi buyurtma #{order_id}\n"
             f"Masofa: {o['km']:.1f} km, {o['minutes']} daqiqa\n"
-            f"Narx: {o['price']:,} so'm (💵 naqd)")
+            f"Narx: {o['price']:,} so'm\nSiz olasiz: {o['driver_earning']:,} so'm (💵 naqd)")
     kb = InlineKeyboardMarkup(inline_keyboard=[[
         InlineKeyboardButton(text="✅ Qabul qilish", callback_data=f"accept:{order_id}"),
     ]])
@@ -384,8 +387,8 @@ def report_text() -> str:
     for title, since in [("Bugun", midnight),
                          ("7 kun", now - timedelta(days=7)),
                          ("30 kun", now - timedelta(days=30))]:
-        cnt, total = db.report(since)
-        lines.append(f"{title}: {cnt} ta, {total:,} so'm")
+        cnt, total, comm = db.report(since)
+        lines.append(f"{title}: {cnt} ta, {total:,} so'm (komissiya: {comm:,})")
     return "\n".join(lines)
 
 

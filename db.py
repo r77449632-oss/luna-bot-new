@@ -59,11 +59,22 @@ def connect():
         conn.close()
 
 
+def migrate(c):
+    """Eski bazaga yangi ustunlarni qo'shadi (mavjud ma'lumot saqlanadi)."""
+    cols = {r["name"] for r in c.execute("PRAGMA table_info(orders)")}
+    if "commission" not in cols:
+        c.execute("ALTER TABLE orders ADD COLUMN commission INTEGER NOT NULL DEFAULT 0")
+    if "driver_earning" not in cols:
+        c.execute("ALTER TABLE orders ADD COLUMN driver_earning INTEGER NOT NULL DEFAULT 0")
+        c.execute("UPDATE orders SET driver_earning = price")
+
+
 def init_db():
     with connect() as c:
         c.executescript(SCHEMA)
         for key, value in DEFAULT_SETTINGS.items():
             c.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", (key, value))
+        migrate(c)
 
 
 # ---------- Sozlamalar ----------
@@ -121,9 +132,10 @@ def list_drivers(statuses: tuple):
 
 
 def driver_stats(driver_id: int):
+    """Haydovchining sof daromadi (komissiyadan keyin)."""
     with connect() as c:
         return c.execute(
-            "SELECT COUNT(*) AS cnt, COALESCE(SUM(price), 0) AS total FROM orders "
+            "SELECT COUNT(*) AS cnt, COALESCE(SUM(driver_earning), 0) AS total FROM orders "
             "WHERE driver_id=? AND status='done'",
             (driver_id,),
         ).fetchone()
@@ -131,13 +143,15 @@ def driver_stats(driver_id: int):
 
 # ---------- Buyurtmalar ----------
 
-def create_order(passenger_id, p_lat, p_lon, d_lat, d_lon, km, minutes, price) -> int:
+def create_order(passenger_id, p_lat, p_lon, d_lat, d_lon, km, minutes, price,
+                 commission, driver_earning) -> int:
     with connect() as c:
         cur = c.execute(
             """INSERT INTO orders (passenger_id, pickup_lat, pickup_lon, dest_lat, dest_lon,
-                                   km, minutes, price, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (passenger_id, p_lat, p_lon, d_lat, d_lon, km, minutes, price, now()),
+                                   km, minutes, price, commission, driver_earning, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (passenger_id, p_lat, p_lon, d_lat, d_lon, km, minutes, price,
+             commission, driver_earning, now()),
         )
         return cur.lastrowid
 
@@ -218,10 +232,12 @@ def rate_order(order_id: int, passenger_id: int, stars: int) -> bool:
 
 
 def report(since: datetime):
+    """Qaytaradi: (buyurtmalar soni, umumiy narx, komissiya jami)."""
     with connect() as c:
         r = c.execute(
-            "SELECT COUNT(*) AS cnt, COALESCE(SUM(price), 0) AS total FROM orders "
+            "SELECT COUNT(*) AS cnt, COALESCE(SUM(price), 0) AS total, "
+            "COALESCE(SUM(commission), 0) AS comm FROM orders "
             "WHERE status='done' AND created_at>=?",
             (since.isoformat(timespec="seconds"),),
         ).fetchone()
-        return r["cnt"], r["total"]
+        return r["cnt"], r["total"], r["comm"]
